@@ -2,6 +2,17 @@
  * Oracle uses independent push maps, ordinary arithmetic, and unpacked BFS
  * distances. It never calls the solver's move/index/PDB routines to build BFS.
  */
+/*
+First, generate a complete BFS distance table
+              ↓
+H1: Check if the heuristic overestimates
+H2, H4: Check table contents and implement batched reads
+              ↓
+H3: Run IDA* for each state
+              ↓
+Compare the IDA* solution length with the BFS distance
+Replay the solution to verify it actually solves the problem
+*/
 #ifndef MINIRUBIK_HOST_GATES_H
 #define MINIRUBIK_HOST_GATES_H
 #ifdef _WIN32
@@ -96,6 +107,10 @@ static state_t oracle_unrank(uint32_t rank)
  * entire contents/semantics instead, including the special root row. */
 static bool gate_small_tables(void)
 {
+    /* Verify that the small tables are consistent with each other and with the
+     * definitions of the cube. This includes checking that the powers_of_3,
+     * factorial, mod3, source, twist, move_face, move_turns, inverse_move,
+     * valid_next_moves, and successor_count tables are correct. */
     static const char *const names[9] = {"R","R2","R'","B","B2","B'","D","D2","D'"};
     unsigned weight = 1;
     for (unsigned i = 0; i < 6; ++i) {
@@ -142,7 +157,7 @@ static bool host_gates(bool run_h3, unsigned shard, unsigned shards)
 {
     bool ok = false;
     if (shards == 0 || shards > 64 || shard >= shards) return false;
-    uint8_t *distance = NULL;
+    uint8_t *distance = NULL; // distance[r] = number of moves from solved state to state r, 0~11, 255=unreachable
     uint32_t *queue = NULL;
     static uint16_t pt[3][5040], ot[3][729];
     uint8_t perm_ref[5040], ori_ref[729];
@@ -227,6 +242,8 @@ static bool host_gates(bool run_h3, unsigned shard, unsigned shards)
         for (unsigned i = 0; i < counts[table]; ++i) {
             unsigned value = get_pdb_distance(packed[table], i);
             if (value == 15 || value != reference[table][i]) {
+                // If the value is 15, it means that the PDB distance is unreachable, which is incorrect. 
+                // If the value does not match the reference value, it means that the PDB distance is incorrect.
                 fprintf(stderr, "H2/H4 %s index=%u packed=%u reference=%u\n",
                         names[table], i, value, reference[table][i]);
                 goto done;
@@ -250,11 +267,19 @@ static bool host_gates(bool run_h3, unsigned shard, unsigned shards)
     started = gate_wall_time();
     for (uint32_t r = 0; r < GATE_STATES; ++r) {
         state_t state = oracle_unrank(r);
-        unsigned hp = get_pdb_distance(pdb_permutation_packed, get_permutation_index(state.p));
-        unsigned ho = get_pdb_distance(pdb_orientation_packed, get_orientation_index(state.o));
+        unsigned hp = get_pdb_distance(pdb_permutation_packed, get_permutation_index(state.p)); // permutation PDB distance
+        unsigned ho = get_pdb_distance(pdb_orientation_packed, get_orientation_index(state.o)); // orientation PDB distance
         unsigned h = evaluate_heuristic(&state);
+        // distance[r] is the exact distance from the solved state to state r, which is computed by BFS
         if (hp > distance[r] || ho > distance[r] || h > distance[r] ||
             h != (hp > ho ? hp : ho)) {
+                /*
+            Each statement is to evaluate:
+            1. hp > distance[r]: if the permutation PDB distance is greater than the exact distance, it means the heuristic is not admissible
+            2. ho > distance[r]: if the orientation PDB distance is greater than the exact distance, it means the heuristic is not admissible
+            3. h > distance[r]: if the maximum of the two PDB distances is greater than the exact distance, it means the heuristic is not admissible
+            4. h != (hp > ho ? hp : ho): if the maximum of the two PDB distances is not equal to the maximum of hp and ho, it means the heuristic is not correctly computed
+            */
             fprintf(stderr, "H1 rank=%u h=%u d=%u\n", (unsigned)r, h, distance[r]);
             goto done;
         }
@@ -275,6 +300,13 @@ static bool host_gates(bool run_h3, unsigned shard, unsigned shards)
     for (uint32_t r = begin; r < end; ++r) {
         state_t state = oracle_unrank(r), replay = state;
         struct { uint8_t before, path[MAX_DEPTH], after; } guarded = {0xa5, {0}, 0x5a};
+        /*
+        H3 Also confirm that:
+        - The returned length is correct.
+        - The action sequence is indeed solvable.
+        - The guard values ​​surrounding the path array remain intact.
+        - The input state ID has not changed.
+        */
         int length = ida_star(&state, guarded.path);
         if (length != distance[r] || guarded.before != 0xa5 || guarded.after != 0x5a) {
             fprintf(stderr, "H3 rank=%u length=%d exact=%u or path guard damaged\n",

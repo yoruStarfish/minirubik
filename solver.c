@@ -23,10 +23,15 @@ static const uint8_t twist[3][CUBIES] = {
 /* First nine rows have six successors. The root has all nine.
  * Consecutive turns of one face combine into one move (or cancel). */
 static const uint8_t valid_next_moves[10][9] = {
+    /*
+    R: 0-2
+    B: 3-5
+    D: 6-8
+    */
     {3,4,5,6,7,8}, {3,4,5,6,7,8}, {3,4,5,6,7,8},
     {0,1,2,6,7,8}, {0,1,2,6,7,8}, {0,1,2,6,7,8},
     {0,1,2,3,4,5}, {0,1,2,3,4,5}, {0,1,2,3,4,5},
-    {0,1,2,3,4,5,6,7,8}
+    {0,1,2,3,4,5,6,7,8} // root
 };
 static const uint8_t successor_count[10] = {6,6,6,6,6,6,6,6,6,9};
 static const uint16_t powers_of_3[6] = {1,3,9,27,81,243};
@@ -154,7 +159,7 @@ static int dfs_search(const state_t *state, uint8_t g, uint8_t bound,
 /*
 state: the current state of the cube
 g: the current depth of the search
-bound: the maximum depth of the search
+bound: the maximum depth of the search (the maximum number of moves that can be applied to the cube)
 last_move: the last move that was applied to the cube (ROOT_MOVE=9, the first step is to try 9 moves)
 path: the array that stores the moves that have been applied to the cube
 */
@@ -162,24 +167,28 @@ path: the array that stores the moves that have been applied to the cube
     if (g > MAX_DEPTH || bound > MAX_DEPTH || last_move > ROOT_MOVE)
         return -1;
     const uint8_t root_depth = g;
+    // Push the initial state onto the stack
     search_stack[g].state = *state;
     search_stack[g].last_move = last_move;
     search_stack[g].next_successor = 0;
     for (;;) {
         search_frame_t *frame = &search_stack[g];
         /* Evaluate a frame once on entry, not again after every child. */
-        if (frame->next_successor == 0) {
+        if (frame->next_successor == 0) { // next_successor == 0 means that we have not evaluated the current state yet
             uint8_t h = evaluate_heuristic(&frame->state);
             if (g + h > bound)
                 goto pop_frame;
             if (h == 0 && is_solved(&frame->state))
-                return g; /* Total depth from the initial input. */
+                return g; /* Total steps from the initial input. */
             if (g >= bound || g >= MAX_DEPTH)
                 goto pop_frame;
         }
         if (frame->next_successor == successor_count[frame->last_move])
+        // if all (6 or 9) successors have been explored, we need to pop the current frame and return to the parent frame
             goto pop_frame;
         {
+            // Select the next successor to explore, push it onto the stack, and continue the search
+            // Then we will explore the next successor in the next iteration of the loop (next_surcessor will be incremented)
             uint8_t move = valid_next_moves[frame->last_move][frame->next_successor++];
             search_frame_t *child = &search_stack[g + 1];
             path[g] = move;
@@ -192,14 +201,14 @@ path: the array that stores the moves that have been applied to the cube
 pop_frame:
         if (g == root_depth)
             return -1;
-        --g;
+        --g; // Pop: return to the parent frame
     }
 }
 
 static int ida_star(const state_t *state, uint8_t path[MAX_DEPTH])
 {
     for (uint8_t bound = evaluate_heuristic(state); bound <= MAX_DEPTH; ++bound) {
-        // If we cannot find the answer in this branch，we need to redo dfs and make ++bound
+        // If we cannot find the answer in this branch, we need to redo dfs and make ++bound
         int length = dfs_search(state, 0, bound, ROOT_MOVE, path);
         if (length >= 0)
             return length;
@@ -251,7 +260,7 @@ static bool self_test(void)
 /* Large exact-distance oracle is host-only, never used by the search.
  * Define MINIRUBIK_EMBEDDED to exclude exhaustive host verification. */
 #ifndef MINIRUBIK_EMBEDDED
-// #include "tests/host_gates.h"
+#include "tests/host_gates.h"
 #endif
 
 static int output_failed(void)
