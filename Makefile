@@ -1,4 +1,5 @@
 CC ?= cc
+PYTHON ?= python3
 CFLAGS ?= -O3 -std=c99 -Wall -Wextra -Wpedantic
 FRAMA_C ?= frama-c
 CLANG_FORMAT := $(shell command -v clang-format-20 2>/dev/null || \
@@ -12,25 +13,49 @@ VECTORS := tests/solutions.txt
 INVALID_STATES := 1234567111111 123456711111111 02345671111111 82345671111111 \
 	12345671111110 12345671111114 1234567111111a 11345671111111 12345671111112
 
-.PHONY: all check prove clean indent
+.PHONY: all check check-fast check-legacy prove clean indent pdb
 
 all: solver mini
 
-solver: solver.c
+solver: solver.c pdb_data.h tests/host_gates.h
 	$(CC) $(CFLAGS) $< -o $@
 
 mini: mini.c
 	$(CC) $(CFLAGS) $< -o $@
 
-check: solver mini $(VECTORS)
+solver_bfs: solver_bfs.c
+	$(CC) $(CFLAGS) $< -o $@
+
+check: check-fast
 	./solver --self-test
+
+check-fast: solver tests/check_pdb tests/check_search_stack $(VECTORS)
+	./tests/check_pdb
+	./tests/check_search_stack
+	./solver --self-test-fast
+	$(PYTHON) tests/check_ida.py ./solver
+	@./solver 21345671111111 >&- 2>/dev/null; test $$? -eq 1
+	@./solver --self-test-quick >&- 2>/dev/null; test $$? -eq 1
+
+tests/check_pdb: tests/check_pdb.c solver.c pdb_data.h tests/host_gates.h
+	$(CC) $(CFLAGS) $< -o $@
+
+tests/check_search_stack: tests/check_search_stack.c solver.c pdb_data.h
+	$(CC) $(CFLAGS) $< -o $@
+
+pdb:
+	$(PYTHON) tools/generate_pdb.py
+
+# Historical byte-exact checks assume the BFS solution tie-breaking.
+check-legacy: solver_bfs mini $(VECTORS)
+	./solver_bfs --self-test
 	@expected=$$(mktemp); actual=$$(mktemp); \
 		trap 'rm -f "$$expected" "$$actual"' 0 1 2 15; \
 		count=0; \
 		while IFS='|' read -r state solution; do \
 			case "$$state" in ""|\#*) continue ;; esac; \
 			printf '%s\n' "$$solution" >"$$expected"; \
-			for binary in ./solver ./mini; do \
+			for binary in ./solver_bfs ./mini; do \
 				$$binary "$$state" >"$$actual"; \
 				status=$$?; \
 				test $$status -eq 0 || { \
@@ -45,7 +70,7 @@ $$(wc -c <"$$actual") produced)"; exit 1; }; \
 			count=$$((count + 1)); \
 		done <$(VECTORS); \
 		echo "$$count solution vectors matched by solver and mini"
-	@for binary in ./solver ./mini; do \
+	@for binary in ./solver_bfs ./mini; do \
 		for bad in $(INVALID_STATES); do \
 			$$binary "$$bad" >/dev/null 2>&1; \
 			status=$$?; \
@@ -68,18 +93,18 @@ $$(wc -c <"$$actual") produced)"; exit 1; }; \
 			echo "$$binary with stdout closed: expected status 1, got $$status"; \
 			exit 1; }; \
 	done
-	@./solver --self-test >&- 2>/dev/null; \
+	@./solver_bfs --self-test >&- 2>/dev/null; \
 		status=$$?; \
 		test $$status -eq 1 || { \
 			echo "solver --self-test with stdout closed: expected 1, got $$status"; \
 			exit 1; }
 	@echo "invalid input rejected with status 2, unwritable stdout with status 1"
 
-prove: solver.c
+prove: solver_bfs.c
 	@log=$$(mktemp); trap 'rm -f "$$log"' 0 1 2 15; \
 		$(FRAMA_C) -wp -wp-fct quarter_turn,rank_state,valid,parse_state \
 		-wp-rte -rte-verbose 0 -wp-prover alt-ergo -wp-timeout 20 \
-		-wp-cache none solver.c >"$$log" 2>&1; rc=$$?; \
+		-wp-cache none solver_bfs.c >"$$log" 2>&1; rc=$$?; \
 		grep -Fvx -e '[wp] Warning: Skipped RTE guards: unaligned pointers (\aligned not supported)' \
 		-e '[wp] Warning: Skipped RTE guards: invalid function pointer calls (\valid_function not supported)' "$$log"; \
 		test $$rc -eq 0 && awk '$$1 == "[wp]" && $$2 == "Proved" && $$3 == "goals:" && $$4 > 0 && $$4 == $$6 { ok = 1 } END { exit !ok }' "$$log" && \
@@ -94,4 +119,4 @@ endif
 	$(CLANG_FORMAT) -i $(C_SOURCES)
 
 clean:
-	$(RM) solver mini
+	$(RM) solver solver_bfs mini tests/check_pdb tests/check_search_stack

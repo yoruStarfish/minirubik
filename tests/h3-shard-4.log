@@ -1,0 +1,37 @@
+H2 support tables: all entries verified; maxima: powers=243 factorial=720 mod3=2 source=6 twist=2 face=2 turns=3 inverse=8 successors=8 count=9
+H2 exact BFS: 3674160 populated states; maximum=11 solved=0; 1.172 s wall
+H2/H4 orientation: 729 populated; maximum=6 solved=0; even=365 odd=364 match unpacked BFS
+H2/H4 permutation: 5040 populated; maximum=7 solved=0; even=2520 odd=2520 match unpacked BFS
+H4 accessor: all 256 byte patterns, both nibbles, and final padding verified
+H1: both components and max heuristic admissible on all 3674160 states; 0.544 s wall
+H3: searching ranks [1837080,2296350), shard 4/8 (no oracle hints supplied to IDA*)...
+H3 progress: 16384/459270; 26.065 s wall
+H3 progress: 32768/459270; 49.714 s wall
+H3 progress: 49152/459270; 71.334 s wall
+H3 progress: 65536/459270; 91.664 s wall
+H3 progress: 81920/459270; 118.087 s wall
+H3 progress: 98304/459270; 142.718 s wall
+H3 progress: 114688/459270; 173.486 s wall
+H3 progress: 131072/459270; 197.005 s wall
+H3 progress: 147456/459270; 222.232 s wall
+H3 progress: 163840/459270; 247.415 s wall
+H3 progress: 180224/459270; 267.936 s wall
+H3 progress: 196608/459270; 288.289 s wall
+H3 progress: 212992/459270; 308.816 s wall
+H3 progress: 229376/459270; 331.277 s wall
+H3 progress: 245760/459270; 357.848 s wall
+H3 progress: 262144/459270; 384.939 s wall
+H3 progress: 278528/459270; 410.810 s wall
+H3 progress: 294912/459270; 435.559 s wall
+H3 progress: 311296/459270; 455.757 s wall
+H3 progress: 327680/459270; 473.589 s wall
+H3 progress: 344064/459270; 493.088 s wall
+H3 progress: 360448/459270; 511.658 s wall
+H3 progress: 376832/459270; 529.792 s wall
+H3 progress: 393216/459270; 550.788 s wall
+H3 progress: 409600/459270; 569.713 s wall
+H3 progress: 425984/459270; 589.955 s wall
+H3 progress: 442368/459270; 610.876 s wall
+H3 progress: 458752/459270; 630.213 s wall
+H3 PASS: ranks [1837080,2296350); 459270 optimal solutions independently replayed; 630.829 s wall
+H1/H2/H4 PASS; H3 shard PASS (not the full domain)
