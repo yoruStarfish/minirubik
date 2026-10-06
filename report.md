@@ -458,3 +458,33 @@ Two changes that look attractive and are not worth making: tracking the rank inc
 1. Philo Li, [“How to Solve a Rubik’s Cube Without Memorizing Algorithms”](https://philoli.com/zh/blog/solve-rubiks-cube-without-formulas/), 2026.
 2. Gene Cooperman and Larry Finkelstein, “New Methods for Using Cayley Graphs in Interconnection Networks,” *Discrete Applied Mathematics* 37–38 (1992), 95–118.
 3. Antti Valmari, “What the Small Rubik’s Cube Taught Me about Data Structures, Information Theory, and Randomisation,” *International Journal on Software Tools for Technology Transfer* 8(3) (2006), 180–194.
+
+
+### Stage 4 assembly supplements (SDD, 2026-10-06)
+
+`solver_assembly.s` now accepts assembler-defined `RENDER` (default 0) and
+`TEST_CASE` (default 0). Exactly one input is emitted; the switches add no
+runtime selection overhead. Renderer data and calls remain excluded from
+the performance build. Build commands and the pending measurement checklist
+are in `STAGE4.md`; machine-readable source results are in
+`tests/stage4-source-results.json`.
+
+| TEST_CASE | Input | Assembly source solution length | Exact native BFS distance | Path replay |
+| --- | --- | --- | --- | --- |
+| 0 | 21345671111111 | 11 | 11 | solved |
+| 1 | 12345671111111 | 0 | 0 | solved |
+| 2 | 25314672313211 | 1 | 1 | solved |
+| 3 | 12345672121232 | 11 | 11 | solved |
+
+For the specified T6 input, the source interpreter returned
+`R B' D2 R' B R' B' R D2 R B`. Replaying all 11 moves independently produces
+`12345671111111`. Every case's path was similarly replayed and its length
+compared against the native C exact BFS oracle. These establish source-level
+T5/T6 evidence, not final ELF/Ripes validation.
+
+T7 retired instruction counts on RV32_ISS and a pipelined processor, final
+linked ELF section sizes/instruction audit, and actual GUI animation remain
+pending. No source interpreter step count is reported as a Ripes --iret
+measurement. The source data layout is 107016 bytes with rendering off and
+107314 bytes with rendering on; the final ELF must separately satisfy
+`.data + .rodata + .bss <= 131072` bytes including applicable small-data sections.

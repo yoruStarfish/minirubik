@@ -1,0 +1,71 @@
+{
+  "validation": "source interpreter + native C BFS; NOT final ELF or Ripes measurement",
+  "cases": [
+    {
+      "test_case": 0,
+      "input": "21345671111111",
+      "length": 11,
+      "moves": [
+        "R",
+        "B'",
+        "D2",
+        "R'",
+        "B",
+        "R'",
+        "B'",
+        "R",
+        "D2",
+        "R",
+        "B"
+      ],
+      "replay": "12345671111111",
+      "exact_bfs_distance": 11,
+      "source_steps": 17456538,
+      "source_test_wall_seconds": 28.594
+    },
+    {
+      "test_case": 1,
+      "input": "12345671111111",
+      "length": 0,
+      "moves": [],
+      "replay": "12345671111111",
+      "exact_bfs_distance": 0,
+      "source_steps": 1001,
+      "source_test_wall_seconds": 0.003
+    },
+    {
+      "test_case": 2,
+      "input": "25314672313211",
+      "length": 1,
+      "moves": [
+        "R'"
+      ],
+      "replay": "12345671111111",
+      "exact_bfs_distance": 1,
+      "source_steps": 1228,
+      "source_test_wall_seconds": 0.003
+    },
+    {
+      "test_case": 3,
+      "input": "12345672121232",
+      "length": 11,
+      "moves": [
+        "R",
+        "B",
+        "D2",
+        "B",
+        "R",
+        "D'",
+        "B",
+        "D'",
+        "B'",
+        "R2",
+        "B2"
+      ],
+      "replay": "12345671111111",
+      "exact_bfs_distance": 11,
+      "source_steps": 22295298,
+      "source_test_wall_seconds": 37.695
+    }
+  ]
+}
