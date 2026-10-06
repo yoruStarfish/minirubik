@@ -1,5 +1,52 @@
 # Stage 3: packed-PDB IDA* solver
 
+## Current coordinate-search optimization (128 KB budget)
+
+The production DFS now stores permutation/orientation coordinates instead of
+seven-cubie states. Each child uses two uint16_t transition lookups; it does not
+call apply_move or recompute Lehmer/base-3 ranks. Ranking is confined to input
+and the root of each IDA* iteration. The same PDB heuristic and successor order
+are preserved. The old cube mappings remain useful for host reference checks.
+
+- Offline `transition_data.h`: 103,842 bytes for nine full moves.
+- Packed PDBs: 2,885 bytes.
+- Static DFS frames: 12 * 6 = 72 bytes (section padding is additional).
+- Native GCC -O2 embedded object: .data=0, .bss=96,
+  .rdata=106976, .rdata$zzz=80; conservative sum=107152 bytes.
+  This is not an RV32I ELF measurement; startup/library/linker data must also
+  fit the final target budget. Even using 128000 rather than 131072 bytes,
+  this native-object check leaves 20848 bytes.
+
+Check the actual linked target ELF, not its total file size:
+
+```powershell
+riscv64-unknown-elf-gcc -O2 -std=c99 -march=rv32i -mabi=ilp32 -DMINIRUBIK_EMBEDDED solver.c -o solver-rv32i.elf
+python tools/check_data_size.py solver-rv32i.elf
+```
+
+The checker defaults to a conservative 128000-byte limit and counts data,
+rodata, bss and their small-data variants. `--limit 131072` is available if the
+assignment explicitly means 128 KiB. `make transitions` (or
+`python tools/generate_transitions.py`) regenerates the committed header.
+
+H2 now verifies all 51921 coordinate transitions against the independent
+oracle, including the transitions from solved and maxima 5039/728. Full H1-H4
+was rerun using native GCC -O2 and eight processes: **120.511 seconds total
+wall time**, including oracle setup, all 3,674,160 IDA* searches and independent
+solution replays. See `tests/coordinate-gates-results.txt` for individual H3
+times and exact ranges. CLI, stack-boundary, PDB and gate-mutation tests passed.
+The sample 21345671111111 visits exactly 233966 DFS entries in both the previous
+cubie-mapping version and this coordinate version, returning an 11-move solution.
+This change reduces work per node, not the number of searched nodes.
+
+No RISC-V compiler or Ripes measurement was available here. Whether the user's
+120095277 retired instructions drop below 50 million must be measured on the
+new target ELF; native timing is not a retired-instruction measurement.
+
+The sections below record earlier implementation stages; the current search
+uses the 72-byte coordinate stack and the extra offline transition tables above.
+
+
 `solver.c` now uses IDA*, not the exhaustive full-state BFS described in
 `report.md`. The previous implementation is retained in `solver_bfs.c`.
 The 14-digit input and exit codes are unchanged, but an equally short solution
@@ -111,3 +158,26 @@ linker configuration, and input/output support. The current CLI uses hosted
 Native C checks do not establish RV32I instruction counts or simulator timing.
 When cross-compiling, use `-march=rv32i -mabi=ilp32` and inspect the emitted
 code for arithmetic helper calls as well as multiply/divide instructions.
+
+## Direct nine-move mapping
+
+`apply_move` now uses `move_source[9][7]` and `move_twist[9][7]`,
+composed from the original quarter-turn rules. Every move performs exactly one
+seven-cubie mapping, including half turns and inverse turns. The two tables
+occupy 126 bytes. The old quarter-turn model and its tables are host-only
+references, excluded from `MINIRUBIK_EMBEDDED` builds.
+
+H2 verifies all 126 generated entries and all 51,921 projected transitions
+(9 times (5040 permutations + 729 orientations)) against both the independent
+oracle and repeated quarter turns. Since permutation and orientation updates
+are separable, this checks the move mapping across the complete cube domain.
+Host H1/H2/H4, the eight optimal vectors, forty scrambles, and static-stack
+boundary checks passed after this change. H3 was not rerun; the earlier full
+H3 timing/result belongs to the previous move implementation.
+
+With native GCC at -O2, apply_move is inlined and quarter_turn is absent from
+the embedded object. No RISC-V compiler was available for this change, so
+RV32I inlining and retired-instruction improvements remain to be measured in
+Ripes. Mapping work is reduced from 7/14/21 cubie updates to 7 for each of
+R/R2/R' (likewise B and D); this does not imply a proportional improvement for
+the entire search. Permutation ranking, move ordering and PDBs are unchanged.

@@ -1,19 +1,24 @@
 #include <stdint.h>
+#ifndef MINIRUBIK_EMBEDDED
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#endif
 #include <stdbool.h>
 #include "pdb_data.h"
+#include "transition_data.h"
 
 enum { CUBIES = 7, PERMUTATIONS = 5040, ORIENTATIONS = 729,
        MOVES = 9, MAX_DEPTH = 11, ROOT_MOVE = 9 };
 typedef struct { uint8_t p[CUBIES], o[CUBIES]; } state_t;
 
+#ifndef MINIRUBIK_EMBEDDED
 static const char *const move_names[MOVES] =
     {"R", "R2", "R'", "B", "B2", "B'", "D", "D2", "D'"};
-#ifndef MINIRUBIK_EMBEDDED
 static const uint8_t inverse_move[MOVES] = {2, 1, 0, 5, 4, 3, 8, 7, 6};
 #endif
+#ifndef MINIRUBIK_EMBEDDED
+/* Reference quarter-turn model is used only by host verification. */
 static const uint8_t move_face[MOVES] = {0, 0, 0, 1, 1, 1, 2, 2, 2};
 static const uint8_t move_turns[MOVES] = {1, 2, 3, 1, 2, 3, 1, 2, 3};
 static const uint8_t source[3][CUBIES] = {
@@ -22,6 +27,35 @@ static const uint8_t source[3][CUBIES] = {
 static const uint8_t twist[3][CUBIES] = {
     {1, 2, 0, 2, 1, 0, 0}, {0, 0, 0, 1, 2, 1, 2}, {0, 0, 0, 0, 0, 0, 0}
 };
+#endif
+
+/* Full move maps, composed offline from source/twist quarter turns.
+ * Each row maps destination -> original source; twist is modulo 3.
+ * Composition: Snew[i]=S[source[f][i]],
+ * Tnew[i]=(T[source[f][i]]+twist[f][i]) % 3. */
+static const uint8_t move_source[MOVES][CUBIES] = {
+    {1, 4, 2, 0, 3, 5, 6}, /* R */
+    {4, 3, 2, 1, 0, 5, 6}, /* R2 */
+    {3, 0, 2, 4, 1, 5, 6}, /* R' */
+    {0, 1, 2, 4, 5, 6, 3}, /* B */
+    {0, 1, 2, 5, 6, 3, 4}, /* B2 */
+    {0, 1, 2, 6, 3, 4, 5}, /* B' */
+    {0, 2, 5, 3, 1, 4, 6}, /* D */
+    {0, 5, 4, 3, 2, 1, 6}, /* D2 */
+    {0, 4, 1, 3, 5, 2, 6}, /* D' */
+};
+static const uint8_t move_twist[MOVES][CUBIES] = {
+    {1, 2, 0, 2, 1, 0, 0}, /* R */
+    {0, 0, 0, 0, 0, 0, 0}, /* R2 */
+    {1, 2, 0, 2, 1, 0, 0}, /* R' */
+    {0, 0, 0, 1, 2, 1, 2}, /* B */
+    {0, 0, 0, 0, 0, 0, 0}, /* B2 */
+    {0, 0, 0, 1, 2, 1, 2}, /* B' */
+    {0, 0, 0, 0, 0, 0, 0}, /* D */
+    {0, 0, 0, 0, 0, 0, 0}, /* D2 */
+    {0, 0, 0, 0, 0, 0, 0}, /* D' */
+};
+
 /* First nine rows have six successors. The root has all nine.
  * Consecutive turns of one face combine into one move (or cancel). */
 static const uint8_t valid_next_moves[10][9] = {
@@ -103,17 +137,20 @@ static uint32_t get_permutation_index(const uint8_t perm[CUBIES])
     */
 }
 
-static uint8_t evaluate_heuristic(const state_t *state)
+static inline uint8_t coordinate_heuristic(uint16_t p, uint16_t o)
 {
-    uint8_t ori = get_pdb_distance(pdb_orientation_packed,
-                                  get_orientation_index(state->o));
-    uint8_t perm = get_pdb_distance(pdb_permutation_packed,
-                                   get_permutation_index(state->p));
+    uint8_t ori = get_pdb_distance(pdb_orientation_packed, o);
+    uint8_t perm = get_pdb_distance(pdb_permutation_packed, p);
     return ori > perm ? ori : perm;
-    // if ori > perm, return ori, else return perm
 }
 
-static bool is_solved(const state_t *state)
+static uint8_t evaluate_heuristic(const state_t *state)
+{
+    return coordinate_heuristic((uint16_t)get_permutation_index(state->p),
+                                (uint16_t)get_orientation_index(state->o));
+}
+
+static inline bool is_solved(const state_t *state)
 {
     for (uint8_t i = 0; i < CUBIES; ++i)
         if (state->p[i] != i || state->o[i] != 0)
@@ -121,7 +158,8 @@ static bool is_solved(const state_t *state)
     return true;
 }
 
-static state_t quarter_turn(state_t state, uint8_t face)
+#ifndef MINIRUBIK_EMBEDDED
+static inline state_t quarter_turn(state_t state, uint8_t face)
 // face: 0 = R, 1 = B, 2 = D, which face that we want to do a rotation
 {
     state_t result;
@@ -133,18 +171,27 @@ static state_t quarter_turn(state_t state, uint8_t face)
     return result;
 }
 
-static state_t apply_move(state_t state, uint8_t move)
+#endif
+
+/* One seven-cubie pass for all nine moves, including half/inverse turns. */
+static inline state_t apply_move(state_t state, uint8_t move)
 {
-    for (uint8_t i = 0; i < move_turns[move]; ++i)
-        state = quarter_turn(state, move_face[move]);
-    return state;
+    state_t result;
+    for (uint8_t i = 0; i < CUBIES; ++i) {
+        uint8_t from = move_source[move][i];
+        result.p[i] = state.p[from];
+        result.o[i] = mod3[state.o[from] + move_twist[move][i]];
+    }
+    return result;
 }
 
-/* Explicit DFS frames replace recursive calls. Each depth retains its state
+/* Coordinate DFS: each child needs two transition lookups, no cubie mapping
+ * or re-ranking. Explicit frames replace recursive calls. Each depth retains its state
  * and next successor cursor, so popping restores the parent without undo.
  * Static storage: no heap or recursive call stack; not reentrant/thread-safe. */
 typedef struct {
-    state_t state; // the current state of the cube
+    uint16_t p; // permutation coordinate: 0..5039
+    uint16_t o; // orientation coordinate: 0..728
     uint8_t last_move; // the last move that was applied to the cube (ROOT_MOVE=9, the first step is to try 9 moves)
     uint8_t next_successor; // the index of the next successor to be explored
 } search_frame_t;
@@ -170,17 +217,18 @@ path: the array that stores the moves that have been applied to the cube
         return -1;
     const uint8_t root_depth = g;
     // Push the initial state onto the stack
-    search_stack[g].state = *state;
+    search_stack[g].p = (uint16_t)get_permutation_index(state->p);
+    search_stack[g].o = (uint16_t)get_orientation_index(state->o);
     search_stack[g].last_move = last_move;
     search_stack[g].next_successor = 0;
     for (;;) {
         search_frame_t *frame = &search_stack[g];
         /* Evaluate a frame once on entry, not again after every child. */
         if (frame->next_successor == 0) { // next_successor == 0 means that we have not evaluated the current state yet
-            uint8_t h = evaluate_heuristic(&frame->state);
+            uint8_t h = coordinate_heuristic(frame->p, frame->o);
             if (g + h > bound)
                 goto pop_frame;
-            if (h == 0 && is_solved(&frame->state))
+            if (frame->p == 0 && frame->o == 0)
                 return g; /* Total steps from the initial input. */
             if (g >= bound || g >= MAX_DEPTH)
                 goto pop_frame;
@@ -194,7 +242,8 @@ path: the array that stores the moves that have been applied to the cube
             uint8_t move = valid_next_moves[frame->last_move][frame->next_successor++];
             search_frame_t *child = &search_stack[g + 1];
             path[g] = move;
-            child->state = apply_move(frame->state, move);
+            child->p = permutation_transition[move][frame->p];
+            child->o = orientation_transition[move][frame->o];
             child->last_move = move;
             child->next_successor = 0;
             ++g; /* Push: visit the child before trying another sibling. */
@@ -222,7 +271,12 @@ static bool parse_state(const char *input, state_t *state)
 {
     uint32_t seen = 0;
     uint8_t sum = 0;
-    if (strlen(input) != 14)
+    /* Stop at an early NUL before reading any later input position. */
+    for (uint8_t i = 0; i < 14; ++i) {
+        if (input[i] == '\0')
+            return false;
+    }
+    if (input[14] != '\0')
         return false;
     for (uint8_t i = 0; i < CUBIES; ++i) {
         if (input[i] < '1' || input[i] > '7' ||
@@ -268,28 +322,30 @@ static bool self_test(void)
 #include "tests/host_gates.h"
 #endif
 
+#ifndef MINIRUBIK_EMBEDDED
 static int output_failed(void)
 {
     return fflush(stdout) != 0 || ferror(stdout);
 }
 
+#endif
+
 #ifdef MINIRUBIK_EMBEDDED
 static const char target_input[] = "21345671111111";
-#endif
-#ifdef MINIRUBIK_EMBEDDED
 int main(void)
-#else
-int main(int argc, char **argv)
-#endif
 {
     state_t state;
     uint8_t path[MAX_DEPTH];
-#ifdef MINIRUBIK_EMBEDDED
-    if (!parse_state(target_input, &state)) {
-        fputs("invalid target_input\n", stderr);
+    if (!parse_state(target_input, &state))
         return 2;
-    }
+    int length = ida_star(&state, path);
+    return length < 0 ? 1 : 0;
+}
 #else
+int main(int argc, char **argv)
+{
+    state_t state;
+    uint8_t path[MAX_DEPTH];
     if (argc == 2 && strcmp(argv[1], "--self-test-quick") == 0) {
         if (!self_test()) {
             fputs("self-test failed\n", stderr);
@@ -325,7 +381,6 @@ int main(int argc, char **argv)
                 argc > 0 && argv[0] ? argv[0] : "solver");
         return 2;
     }
-#endif /* MINIRUBIK_EMBEDDED: input selection */
     int length = ida_star(&state, path);
     if (length < 0) {
         fputs("no solution within 11 moves\n", stderr);
@@ -336,4 +391,4 @@ int main(int argc, char **argv)
     putchar('\n');
     return output_failed();
 }
-
+#endif /* MINIRUBIK_EMBEDDED */

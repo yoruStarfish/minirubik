@@ -1,3 +1,5 @@
+#include <stdio.h>
+#include <string.h>
 #define MINIRUBIK_EMBEDDED
 #define main solver_main
 #include "../solver.c"

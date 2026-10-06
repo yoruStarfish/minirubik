@@ -12,7 +12,7 @@ def main():
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
     source = (root / 'solver.c').read_text(encoding='utf-8')
-    pdb = (root / 'pdb_data.h').read_text()
+    pdb = (root / 'pdb_data.h').read_text(encoding='utf-8')
     # Bypass smoke tests so failures must come from the named full-domain gate.
     source = source.replace('int main(int argc, char **argv)', 'int original_main(int argc, char **argv)')
     source += '\nint main(void) { return host_gates(true, 0, 64) ? 0 : 1; }\n'
@@ -28,7 +28,8 @@ def main():
     with tempfile.TemporaryDirectory(prefix='gate-mutations-', dir=root / 'tests') as directory:
         work = Path(directory)
         (work / 'tests').mkdir()
-        (work / 'tests/host_gates.h').write_text((root / 'tests/host_gates.h').read_text())
+        (work / 'transition_data.h').write_text((root / 'transition_data.h').read_text(encoding='utf-8'))
+        (work / 'tests/host_gates.h').write_text((root / 'tests/host_gates.h').read_text(encoding='utf-8'), encoding='utf-8')
         for name, old, new, diagnostic in cases + [('H2 unpopulated PDB', '', '', 'H2/H4 orientation index=')]:
             if old:
                 assert old in source

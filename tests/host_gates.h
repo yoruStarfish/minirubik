@@ -136,6 +136,45 @@ static bool gate_small_tables(void)
             inverse_move[m] != inverse || strcmp(move_names[m], names[m]) != 0)
             return false;
     }
+    /* Check every generated entry against the independent push model. */
+    const state_t solved = {{0,1,2,3,4,5,6}, {0}};
+    for (unsigned m = 0; m < 9; ++m) {
+        state_t expected = oracle_move(solved, m);
+        for (unsigned i = 0; i < 7; ++i)
+            if (move_source[m][i] != expected.p[i] ||
+                move_twist[m][i] != expected.o[i]) return false;
+    }
+    /* All permutation and orientation projections: by separability this
+     * establishes equivalence on every full cube state for all nine moves. */
+    for (unsigned r = 0; r < 5040 + 729; ++r) {
+        state_t state = oracle_unrank(r < 5040 ? r * 729 : r - 5040);
+        for (uint8_t m = 0; m < MOVES; ++m) {
+            state_t expected = oracle_move(state, m), repeated = state;
+            for (unsigned t = 0; t < move_turns[m]; ++t)
+                repeated = quarter_turn(repeated, move_face[m]);
+            state_t actual = apply_move(state, m);
+            if (memcmp(&actual, &expected, sizeof actual) ||
+                memcmp(&actual, &repeated, sizeof actual)) return false;
+        }
+    }
+    unsigned max_p = 0, max_o = 0;
+    for (unsigned r = 0; r < 5040 + 729; ++r) {
+        bool perm = r < 5040;
+        unsigned index = perm ? r : r - 5040;
+        state_t state = oracle_unrank(perm ? index * 729 : index);
+        for (unsigned m = 0; m < 9; ++m) {
+            state_t expected = oracle_move(state, m);
+            unsigned actual = perm ? permutation_transition[m][index]
+                                   : orientation_transition[m][index];
+            unsigned reference = perm ? oracle_p(&expected) : oracle_o(&expected);
+            if (actual != reference) return false;
+            if (perm && actual > max_p) max_p = actual;
+            if (!perm && actual > max_o) max_o = actual;
+        }
+    }
+    if (max_p != 5039 || max_o != 728) return false;
+    puts("H2 coordinate transitions: all 51921 entries including solved rows verified; maxima=5039/728");
+    puts("H2 direct moves: all 126 entries verified; 51921 projected transitions match independent and repeated-quarter models");
     for (unsigned last = 0; last <= 9; ++last) {
         unsigned seen = 0, count = 0;
         for (unsigned m = 0; m < 9; ++m) {

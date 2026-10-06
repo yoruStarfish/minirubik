@@ -13,11 +13,11 @@ VECTORS := tests/solutions.txt
 INVALID_STATES := 1234567111111 123456711111111 02345671111111 82345671111111 \
 	12345671111110 12345671111114 1234567111111a 11345671111111 12345671111112
 
-.PHONY: all check check-fast check-legacy prove clean indent pdb
+.PHONY: all check check-fast check-legacy prove clean indent pdb transitions
 
 all: solver mini
 
-solver: solver.c pdb_data.h tests/host_gates.h
+solver: solver.c pdb_data.h transition_data.h tests/host_gates.h
 	$(CC) $(CFLAGS) $< -o $@
 
 mini: mini.c
@@ -37,11 +37,14 @@ check-fast: solver tests/check_pdb tests/check_search_stack $(VECTORS)
 	@./solver 21345671111111 >&- 2>/dev/null; test $$? -eq 1
 	@./solver --self-test-quick >&- 2>/dev/null; test $$? -eq 1
 
-tests/check_pdb: tests/check_pdb.c solver.c pdb_data.h tests/host_gates.h
+tests/check_pdb: tests/check_pdb.c solver.c pdb_data.h transition_data.h tests/host_gates.h
 	$(CC) $(CFLAGS) $< -o $@
 
-tests/check_search_stack: tests/check_search_stack.c solver.c pdb_data.h
+tests/check_search_stack: tests/check_search_stack.c solver.c pdb_data.h transition_data.h
 	$(CC) $(CFLAGS) $< -o $@
+
+transitions:
+	$(PYTHON) tools/generate_transitions.py
 
 pdb:
 	$(PYTHON) tools/generate_pdb.py
