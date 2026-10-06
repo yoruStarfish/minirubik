@@ -11,7 +11,9 @@ typedef struct { uint8_t p[CUBIES], o[CUBIES]; } state_t;
 
 static const char *const move_names[MOVES] =
     {"R", "R2", "R'", "B", "B2", "B'", "D", "D2", "D'"};
+#ifndef MINIRUBIK_EMBEDDED
 static const uint8_t inverse_move[MOVES] = {2, 1, 0, 5, 4, 3, 8, 7, 6};
+#endif
 static const uint8_t move_face[MOVES] = {0, 0, 0, 1, 1, 1, 2, 2, 2};
 static const uint8_t move_turns[MOVES] = {1, 2, 3, 1, 2, 3, 1, 2, 3};
 static const uint8_t source[3][CUBIES] = {
@@ -237,6 +239,7 @@ static bool parse_state(const char *input, state_t *state)
     return mod3[sum] == 0;
 }
 
+#ifndef MINIRUBIK_EMBEDDED
 static bool self_test(void)
 {
     const state_t solved = {{0,1,2,3,4,5,6}, {0}};
@@ -257,6 +260,8 @@ static bool self_test(void)
     return true;
 }
 
+#endif
+
 /* Large exact-distance oracle is host-only, never used by the search.
  * Define MINIRUBIK_EMBEDDED to exclude exhaustive host verification. */
 #ifndef MINIRUBIK_EMBEDDED
@@ -268,10 +273,23 @@ static int output_failed(void)
     return fflush(stdout) != 0 || ferror(stdout);
 }
 
+#ifdef MINIRUBIK_EMBEDDED
+static const char target_input[] = "21345671111111";
+#endif
+#ifdef MINIRUBIK_EMBEDDED
+int main(void)
+#else
 int main(int argc, char **argv)
+#endif
 {
     state_t state;
     uint8_t path[MAX_DEPTH];
+#ifdef MINIRUBIK_EMBEDDED
+    if (!parse_state(target_input, &state)) {
+        fputs("invalid target_input\n", stderr);
+        return 2;
+    }
+#else
     if (argc == 2 && strcmp(argv[1], "--self-test-quick") == 0) {
         if (!self_test()) {
             fputs("self-test failed\n", stderr);
@@ -307,6 +325,7 @@ int main(int argc, char **argv)
                 argc > 0 && argv[0] ? argv[0] : "solver");
         return 2;
     }
+#endif /* MINIRUBIK_EMBEDDED: input selection */
     int length = ida_star(&state, path);
     if (length < 0) {
         fputs("no solution within 11 moves\n", stderr);
