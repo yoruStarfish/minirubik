@@ -78,7 +78,13 @@ main:
 .Lembedded_return:
     lw ra,44(sp)
     addi sp,sp,48
-    ret
+
+    # Ripes Exit2: a0 = 0 success, 1 search failure, 2 invalid input.
+    li a7,93
+    ecall
+
+.Lhalt:
+    j .Lhalt
     .size main, .-main
 
 # Leaf parser: a0=NUL-terminated 14 digits, a1=14-byte state.

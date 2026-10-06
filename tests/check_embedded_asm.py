@@ -108,6 +108,10 @@ def run(parsed,text,inspect=None):
             if take:pc=labels[a[2]]
         elif op=='j':pc=labels[a[0]]
         elif op=='call':regs['ra']=pc;pc=labels[a[0]]
+        elif op=='ecall':
+            # Model only Ripes Exit2, not an actual simulator/system call.
+            assert reg('a7')==93, 'Unsupported syscall'
+            pc=0xffffffff
         elif op in ('ret','jr'):pc=reg('ra' if op=='ret' else a[0])
         else:raise ValueError((op,a))
         if v is not None and a[0]!='zero':regs[a[0]]=v&MASK
