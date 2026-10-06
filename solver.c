@@ -331,7 +331,7 @@ static int output_failed(void)
 #endif
 
 #ifdef MINIRUBIK_EMBEDDED
-static const char target_input[] = "21345671111111";
+static const char target_input[] = "25314672313211";
 int main(void)
 {
     state_t state;
